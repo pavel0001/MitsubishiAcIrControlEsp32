@@ -4,6 +4,7 @@
 #include <ir_MitsubishiHeavy.h>
 #include <AsyncMqttClient.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
 
 #include <Wire.h>
 #include <SPI.h>
@@ -18,24 +19,8 @@
 
 #define MQTT_TOPIC_ROOT "esp32/myowndemo/+"
 #define MQTT_TOPIC_CALLBACK "esp32/myowndemo/callback"
-#define MQTT_TOPIC_TEMPERATURE "esp32/myowndemo/temperature"
-#define MQTT_TOPIC_PRESSURE "esp32/myowndemo/pressure"
-#define MQTT_TOPIC_ALTITUDE "esp32/myowndemo/altitude"
-
-#define MQTT_TOPIC_AC "esp32/myowndemo/ac/#"
-#define MQTT_TOPIC_AC_RUN "esp32/myowndemo/ac/run"
-#define MQTT_TOPIC_AC_MODE "esp32/myowndemo/ac/mode"
-#define MQTT_TOPIC_AC_TEMP_HEAT "esp32/myowndemo/ac/temp/heat"
-#define MQTT_TOPIC_AC_TEMP_COOL "esp32/myowndemo/ac/temp/cool"
-
-#define AC_COMMAND_ON "on"
-#define AC_COMMAND_OFF "of"
-
-#define AC_MODE_COOL "cool"
-#define AC_MODE_HEAT "heat"
-#define AC_MODE_AVTO "avto"
-#define AC_MODE_DRY "dry"
-#define AC_MODE_TURBO "turbo"
+#define MQTT_TOPIC_SENSOR "esp32/myowndemo/sensor"
+#define MQTT_TOPIC_JSON_CMD  "esp32/myowndemo/json"
 
 Adafruit_BMP280 bme;
 
@@ -49,47 +34,63 @@ const long interval = 10000;
 const uint16_t kIrLed = 23;  // ESP8266 GPIO pin to use. Recommended: 4 (D2).
 IRMitsubishiHeavy88Ac ac(kIrLed);  // Set the GPIO used for sending messages.
 
+void sendAcStateJson(){
+    char tmpBuff[150];
+  StaticJsonDocument<200> doc;
 
+  doc["clean"] = ac.getClean() ? 1 : 0;
+  doc["fan"] = ac.getFan();
+  doc["mode"] = ac.getMode();
+  doc["power"] = ac.getPower()? 1 : 0;
+  doc["swingH"] = ac.getSwingHorizontal();
+  doc["swingV"] = ac.getSwingVertical();
+  doc["temp"] = ac.getTemp();
+  doc["threeD"] = ac.get3D()? 1 : 0;
+  doc["turbo"] = ac.getTurbo()? 1 : 0;
+  serializeJson(doc, tmpBuff);
+  Serial.println("Print result json converting");
+  Serial.println(tmpBuff);
+  uint16_t packetIdPub3 = mqttClient.publish(MQTT_TOPIC_CALLBACK, 1, true,tmpBuff);
+}
 
+void setAcState(int power, int temp, int mode, int fan, int swingV, int swingH, int turbo, int clean, int threeD){
+ac.setPower(power == 1);
+ac.setTemp(temp);
+ac.setMode(mode);
+ac.setFan(fan);
+ac.setSwingVertical(0b100);
+ac.setSwingHorizontal(0b1000);
+ac.setTurbo(turbo == 1);
+ac.setClean(clean == 1);
+ac.set3D(threeD == 1);
+printState();
+//ac.send();
+}
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  StaticJsonDocument<300> doc;
   String messageTemp;
   for (int i = 0; i < len; i++) {
-    //Serial.print((char)payload[i]);
     messageTemp += (char)payload[i];
   }
-  if (strcmp(topic, MQTT_TOPIC_AC_RUN) == 0) {
-    if(strcmp(messageTemp.c_str(), AC_COMMAND_ON) == 0){
-      ac.setPower(true); 
-    } else{
-      ac.setPower(false); 
+  DeserializationError error = deserializeJson(doc, messageTemp);
+  if (strcmp(topic, MQTT_TOPIC_JSON_CMD) == 0) {
+    if(!error){
+      int clean = doc["clean"];
+      int fan = doc["fan"];
+      int mode = doc["mode"];
+      int power = doc["power"];
+      int swingH = doc["swingH"];
+      int swingV = doc["swingV"];
+      int temp = doc["temp"];
+      int threeD = doc["threeD"];
+      int turbo = doc["turbo"];
+      setAcState( power,  temp , mode,  fan,  swingV,  swingH,  turbo,  clean,  threeD);
     }
-  } else if (strcmp(topic, MQTT_TOPIC_AC_MODE) == 0){
-    if(strcmp(messageTemp.c_str(), AC_MODE_COOL) == 0){
-      ac.setMode(kMitsubishiHeavyCool);  
-    }else if(strcmp(messageTemp.c_str(), AC_MODE_HEAT) == 0){
-      ac.setMode(kMitsubishiHeavyHeat);  
-    }else if(strcmp(messageTemp.c_str(), AC_MODE_AVTO) == 0){
-      ac.setMode(kMitsubishiHeavyAuto);  
-    }else if(strcmp(messageTemp.c_str(), AC_MODE_DRY) == 0){
-      ac.setMode(kMitsubishiHeavyDry);  
-    }else if(strcmp(messageTemp.c_str(), AC_MODE_TURBO) == 0){
-      ac.setTurbo(true);
+    else{
+      Serial.println("Error parsed json error");
     }
-  }else if (strcmp(topic, MQTT_TOPIC_AC_TEMP_HEAT) == 0 ){
-        ac.setMode(kMitsubishiHeavyHeat);  
-        ac.setTemp(messageTemp.toInt());  
-    }else if (strcmp(topic, MQTT_TOPIC_AC_TEMP_COOL) == 0 ) {
-        ac.setMode(kMitsubishiHeavyCool); 
-        ac.setTemp(messageTemp.toInt());  
-    }
-      
-  
-  ac.send();
-  ac.setTurbo(false);
-  printState();
- 
+  } 
   Serial.println("Publish received.");
-             //  "Опубликованные данные получены."
   Serial.print("  message: ");  //  "  сообщение: "
   Serial.println(messageTemp);
   Serial.print("  topic: ");  //  "  топик: "
@@ -127,7 +128,7 @@ void onMqttConnect(bool sessionPresent) {
   Serial.print("Session present: ");     //  "Текущая сессия: "
   Serial.println(sessionPresent);
   // ESP32 подписывается на топик esp32/led
-  uint16_t packetIdSub = mqttClient.subscribe(MQTT_TOPIC_AC, 1);
+  uint16_t packetIdSub = mqttClient.subscribe(MQTT_TOPIC_JSON_CMD, 1);
   Serial.print("Subscribing at QoS 0, packetId: ");  //  "Подписка при QoS 0, ID пакета: "
   Serial.println(packetIdSub);
 }
@@ -200,35 +201,20 @@ void loop() {
  unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
-    char tempArray[16];
-    sprintf(tempArray, "%.2f", bme.readTemperature());
 
-    char pressureArray[16];
-    sprintf(pressureArray, "%.2f", bme.readPressure());
+  char tmpBuff[100];
+  StaticJsonDocument<200> doc;
+  doc["temperature"] = bme.readTemperature();
+  doc["pressure"] = bme.readPressure();
+  doc["altitude"] = bme.readAltitude(1013.25);
+  serializeJson(doc, tmpBuff);
+  Serial.println("Print result json converting");
+  Serial.println(tmpBuff);
 
-    char altitudeArray[16];
-    sprintf(altitudeArray, "%.2f", bme.readAltitude(1013.25));
-
-    Serial.print("Temperature: ");
-    Serial.println(tempArray);
-    Serial.print("Pressure: ");
-    Serial.println(pressureArray);
-    Serial.print("Altitude: ");
-    Serial.println(altitudeArray);
-
-    uint16_t packetIdPub2 = mqttClient.publish(MQTT_TOPIC_TEMPERATURE, 2, true, tempArray);
-    Serial.print("Publishing on topic esp32/myowndemo/temperature at QoS 2, packetId: ");
-    Serial.println(packetIdPub2);
-    delay(100);
-    uint16_t packetIdPub3 = mqttClient.publish(MQTT_TOPIC_PRESSURE, 2, true, pressureArray);
-    Serial.print("Publishing on topic esp32/myowndemo/pressure at QoS 2, packetId: ");
-    Serial.println(packetIdPub3);
-    delay(100);
-    uint16_t packetIdPub4 = mqttClient.publish(MQTT_TOPIC_ALTITUDE, 2, true, altitudeArray);
-    Serial.print("Publishing on topic esp32/myowndemo/altitude at QoS 2, packetId: ");
-    Serial.println(packetIdPub4);
-    delay(100);
-
-    mqttClient.publish(MQTT_TOPIC_CALLBACK, 1, true, ac.toString().c_str());
+  uint16_t packetIdPub2 = mqttClient.publish(MQTT_TOPIC_SENSOR, 1, true, tmpBuff);
+  Serial.print("Publishing on topic esp32/myowndemo/temperature at QoS 2, packetId: ");
+  Serial.println(packetIdPub2);
+  delay(100);
+  sendAcStateJson();
   }
 }
