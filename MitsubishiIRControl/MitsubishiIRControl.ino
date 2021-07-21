@@ -64,7 +64,7 @@ ac.setTurbo(turbo == 1);
 ac.setClean(clean == 1);
 ac.set3D(threeD == 1);
 printState();
-//ac.send();
+ac.send();
 }
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
   StaticJsonDocument<300> doc;
@@ -85,6 +85,7 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
       int threeD = doc["threeD"];
       int turbo = doc["turbo"];
       setAcState( power,  temp , mode,  fan,  swingV,  swingH,  turbo,  clean,  threeD);
+      sendAcStateJson();
     }
     else{
       Serial.println("Error parsed json error");
@@ -192,9 +193,6 @@ void setup() {
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 
   ac.begin();
-  ac.setPower(true); 
-  ac.setSwingVertical(kMitsubishiHeavy88SwingVAuto);      // Swing vertically
-  ac.setSwingHorizontal(kMitsubishiHeavy88SwingHAuto);
 }
 
 void loop() {
