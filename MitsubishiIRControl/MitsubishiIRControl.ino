@@ -31,6 +31,9 @@ TimerHandle_t wifiReconnectTimer;
 unsigned long previousMillis = 0; 
 const long interval = 10000;
 
+unsigned long previousMillisSync = 0; 
+const long intervalSync = 1800000;
+
 const uint16_t kIrLed = 23;  // ESP8266 GPIO pin to use. Recommended: 4 (D2).
 IRMitsubishiHeavy88Ac ac(kIrLed);  // Set the GPIO used for sending messages.
 
@@ -66,6 +69,7 @@ ac.set3D(threeD == 1);
 printState();
 ac.send();
 }
+
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
   StaticJsonDocument<300> doc;
   String messageTemp;
@@ -91,11 +95,6 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
       Serial.println("Error parsed json error");
     }
   } 
-  Serial.println("Publish received.");
-  Serial.print("  message: ");  //  "  сообщение: "
-  Serial.println(messageTemp);
-  Serial.print("  topic: ");  //  "  топик: "
-  Serial.println(topic);
 }
 void onMqttPublish(uint16_t packetId) {
   Serial.println("Publish acknowledged.");
@@ -214,5 +213,12 @@ void loop() {
   Serial.println(packetIdPub2);
   delay(100);
   sendAcStateJson();
+  }
+   unsigned long currentMillisSync = millis();
+  if (currentMillisSync - previousMillisSync >= intervalSync) {
+    previousMillisSync = currentMillisSync;
+    sendAcStateJson();
+    ac.send();
+    Serial.println("Sync completed");
   }
 }
