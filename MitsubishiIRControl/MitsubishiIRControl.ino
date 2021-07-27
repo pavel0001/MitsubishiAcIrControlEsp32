@@ -14,7 +14,7 @@
 #define WIFI_SSID "BS_WiFi"
 #define WIFI_PASSWORD "BSWIFI524"
 
-#define MQTT_HOST IPAddress(5, 196, 95, 208)
+#define MQTT_HOST IPAddress(140, 238, 171, 78)
 #define MQTT_PORT 1883
 
 #define MQTT_TOPIC_ROOT "esp32/myowndemo/+"
