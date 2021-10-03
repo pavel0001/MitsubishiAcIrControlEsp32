@@ -11,8 +11,8 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
 
-#define WIFI_SSID "BS_WiFi"
-#define WIFI_PASSWORD "BSWIFI524"
+#define WIFI_SSID "TP-Link_F9A6"
+#define WIFI_PASSWORD "96683026"
 
 #define MQTT_HOST IPAddress(140, 238, 171, 78)
 #define MQTT_PORT 1883
@@ -76,6 +76,8 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   for (int i = 0; i < len; i++) {
     messageTemp += (char)payload[i];
   }
+  Serial.println("Received message");
+  Serial.println(messageTemp);
   DeserializationError error = deserializeJson(doc, messageTemp);
   if (strcmp(topic, MQTT_TOPIC_JSON_CMD) == 0) {
     if(!error){
@@ -173,10 +175,10 @@ void printState() {
 
 void setup() {
   Serial.begin(115200);
-   if (!bme.begin(0x76)) {
-    Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
-    while (1);
-  }
+  // if (!bme.begin(0x76)) {
+   // Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
+  //  while (1);
+  //}
   connectToWifi();
   WiFi.onEvent(WiFiEvent);
 
@@ -201,9 +203,9 @@ void loop() {
 
   char tmpBuff[100];
   StaticJsonDocument<200> doc;
-  doc["temperature"] = bme.readTemperature();
-  doc["pressure"] = bme.readPressure();
-  doc["altitude"] = bme.readAltitude(1013.25);
+  doc["temperature"] = 22;
+  doc["pressure"] = 17;
+  doc["altitude"] = 222;
   serializeJson(doc, tmpBuff);
   Serial.println("Print result json converting");
   Serial.println(tmpBuff);
